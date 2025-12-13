@@ -208,7 +208,7 @@ with st.container():
     )
 
 # =========================
-# PREDICTION AND RESULTS
+# PREDICTION AND RESULTS (AUTO-RUN)
 # =========================
 if uploaded_file is not None:
     if model is None:
@@ -227,82 +227,80 @@ if uploaded_file is not None:
         processed_image = preprocess_image(image)
         
         if processed_image is not None:
-            # Use a button to trigger analysis
-            if st.button("🚀 Run AI Analysis"):
-                
-                # Predict
-                with st.spinner("🔬 Analyzing X-ray image... Please wait..."):
-                    try:
-                        pred = model.predict(processed_image, verbose=0)[0][0]
-                    except Exception as e:
-                        st.error(f"Prediction failed: {e}")
-                        pred = None
+            
+            # Predict automatically when file is uploaded
+            with st.spinner("🔬 Analyzing X-ray image... Please wait..."):
+                try:
+                    pred = model.predict(processed_image, verbose=0)[0][0]
+                except Exception as e:
+                    st.error(f"Prediction failed: {e}")
+                    pred = None
 
-                if pred is not None:
-                    # --- Display results ---
-                    st.markdown("---")
-                    st.markdown("### 📊 Analysis Results")
+            if pred is not None:
+                # --- Display results ---
+                st.markdown("---")
+                st.markdown("### 📊 Analysis Results")
+                
+                if pred >= 0.5:
+                    # Positive Result
+                    label = "Tuberculosis Detected"
+                    confidence = pred * 100
                     
-                    if pred >= 0.5:
-                        # Positive Result
-                        label = "Tuberculosis Detected"
-                        confidence = pred * 100
-                        
-                        st.markdown(f"""
-                        <div class="result-card result-positive">
-                            <div class="result-title">🚨 {label}</div>
-                            <div class="confidence-value">{confidence:.1f}% Confidence</div>
-                            <p style="font-size: 1.1rem; font-weight: 500;">
-                                The model has detected signs highly consistent with Tuberculosis.
-                            </p>
-                        </div>
-                        """, unsafe_allow_html=True)
-                        
-                        st.warning("""
-                        **⚠️ Immediate Recommended Action:**
-                        1.  **Consult a healthcare professional** (e.g., doctor or specialist) immediately.
-                        2.  Share this X-ray and the AI's result with them.
-                        3.  A definitive diagnosis requires additional clinical tests.
-                        """)
-                        
-                    else:
-                        # Negative Result
-                        label = "Normal (No TB Signs Detected)"
-                        confidence = (1 - pred) * 100
-                        
-                        st.markdown(f"""
-                        <div class="result-card result-negative">
-                            <div class="result-title">✨ {label}</div>
-                            <div class="confidence-value">{confidence:.1f}% Confidence</div>
-                            <p style="font-size: 1.1rem; font-weight: 500;">
-                                The model indicates a high probability of a normal chest X-ray.
-                            </p>
-                        </div>
-                        """, unsafe_allow_html=True)
-                        
-                        st.info("""
-                        **✅ Important Note:**
-                        * A 'Normal' result is reassuring but **does not exclude disease**.
-                        * If symptoms persist (e.g., persistent cough, fever, weight loss), please seek medical consultation.
-                        """)
+                    st.markdown(f"""
+                    <div class="result-card result-positive">
+                        <div class="result-title">🚨 {label}</div>
+                        <div class="confidence-value">{confidence:.1f}% Confidence</div>
+                        <p style="font-size: 1.1rem; font-weight: 500;">
+                            The model has detected signs highly consistent with Tuberculosis.
+                        </p>
+                    </div>
+                    """, unsafe_allow_html=True)
                     
-                    # --- Confidence bar and Technical Details ---
-                    st.markdown("### 📈 Confidence Breakdown")
-                    st.progress(float(confidence / 100), text=f"Model Certainty: {confidence:.1f}%")
+                    st.warning("""
+                    **⚠️ Immediate Recommended Action:**
+                    1.  **Consult a healthcare professional** (e.g., doctor or specialist) immediately.
+                    2.  Share this X-ray and the AI's result with them.
+                    3.  A definitive diagnosis requires additional clinical tests.
+                    """)
                     
-                    with st.expander("🔍 Technical Details of the Analysis"):
-                        col1, col2, col3 = st.columns(3)
-                        
-                        col1.metric("Classification", label.split('(')[0].strip())
-                        col2.metric("Image Size (HxW)", f"{IMG_SIZE[0]}x{IMG_SIZE[1]}")
-                        col3.metric("Raw Score (TB Prob)", f"{pred:.4f}")
-                        
-                        st.caption("Raw score is the output of the final sigmoid layer, representing the probability of TB.")
-                        
-                    # Option to analyze another image
-                    st.markdown("---")
-                    if st.button("🔄 Analyze Another Image"):
-                        st.rerun()
+                else:
+                    # Negative Result
+                    label = "Normal (No TB Signs Detected)"
+                    confidence = (1 - pred) * 100
+                    
+                    st.markdown(f"""
+                    <div class="result-card result-negative">
+                        <div class="result-title">✨ {label}</div>
+                        <div class="confidence-value">{confidence:.1f}% Confidence</div>
+                        <p style="font-size: 1.1rem; font-weight: 500;">
+                            The model indicates a high probability of a normal chest X-ray.
+                        </p>
+                    </div>
+                    """, unsafe_allow_html=True)
+                    
+                    st.info("""
+                    **✅ Important Note:**
+                    * A 'Normal' result is reassuring but **does not exclude disease**.
+                    * If symptoms persist (e.g., persistent cough, fever, weight loss), please seek medical consultation.
+                    """)
+                
+                # --- Confidence bar and Technical Details ---
+                st.markdown("### 📈 Confidence Breakdown")
+                st.progress(float(confidence / 100), text=f"Model Certainty: {confidence:.1f}%")
+                
+                with st.expander("🔍 Technical Details of the Analysis"):
+                    col1, col2, col3 = st.columns(3)
+                    
+                    col1.metric("Classification", label.split('(')[0].strip())
+                    col2.metric("Image Size (HxW)", f"{IMG_SIZE[0]}x{IMG_SIZE[1]}")
+                    col3.metric("Raw Score (TB Prob)", f"{pred:.4f}")
+                    
+                    st.caption("Raw score is the output of the final sigmoid layer, representing the probability of TB.")
+                    
+                # Option to analyze another image
+                st.markdown("---")
+                if st.button("🔄 Analyze Another Image"):
+                    st.rerun()
 
 # --- Placeholder for No Upload ---
 else:
@@ -317,11 +315,6 @@ else:
     </div>
     """, unsafe_allow_html=True)
     
-    # Optional: Suggest an example to try (text removed as requested)
-    with st.expander("🖼️ Example X-Ray Image (TB Positive)", expanded=False):
-        # Image place holder for illustrative purposes
-        st.markdown("Use this space to display a sample positive X-ray image for testing.")
-        
 # =========================
 # FOOTER
 # =========================
