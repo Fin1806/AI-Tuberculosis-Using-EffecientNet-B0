@@ -12,21 +12,21 @@ MODEL_PATH = r"new_efficientnet_model_fixed.h5"
 IMG_SIZE = (224, 224)
 
 # =========================
-# CUSTOM CSS (Refined for better spacing and focus)
+# CUSTOM CSS
 # =========================
 st.markdown("""
 <style>
     /* Main container styling */
     .main {
         padding-top: 2rem;
-        background-color: #f7f9fc; /* Light background for a cleaner look */
+        background-color: #f7f9fc;
     }
     
-    /* Header styling - Gradient remains great, added slight blur for depth */
+    /* Header styling */
     .header-container {
         text-align: center;
         padding: 2rem 0 3rem 0;
-        background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%); /* Changed gradient for a cooler tone */
+        background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
         border-radius: 15px;
         margin-bottom: 2rem;
         box-shadow: 0 10px 20px rgba(0,0,0,0.15);
@@ -35,14 +35,14 @@ st.markdown("""
     
     .header-title {
         color: white;
-        font-size: 3.2rem; /* Slightly larger */
+        font-size: 3.2rem;
         font-weight: 800;
         margin-bottom: 0.5rem;
         text-shadow: 1px 1px 3px rgba(0,0,0,0.4);
     }
     
     .header-subtitle {
-        color: #e0f7fa; /* Lighter subtitle color */
+        color: #e0f7fa;
         font-size: 1.1rem;
         font-weight: 400;
     }
@@ -50,14 +50,22 @@ st.markdown("""
     /* Upload section */
     .upload-section {
         background: #ffffff;
-        padding: 3rem; /* Increased padding */
+        padding: 3rem;
         border-radius: 12px;
-        border: 3px dashed #bbdefb; /* Clearer border */
+        border: 3px dashed #bbdefb;
         margin: 2rem 0;
         text-align: center;
         box-shadow: 0 4px 15px rgba(0,0,0,0.05);
     }
     
+    /* Text color fix for dark mode contrast */
+    .upload-section h3 {
+        color: #333333 !important;
+    }
+    .upload-section p {
+        color: #6c757d !important;
+    }
+
     /* Result cards - More distinct color coding */
     .result-card {
         padding: 2rem;
@@ -67,16 +75,16 @@ st.markdown("""
         transition: transform 0.3s ease;
     }
     .result-card:hover {
-        transform: translateY(-5px); /* Hover effect for results */
+        transform: translateY(-5px);
     }
     
     .result-positive {
-        background: linear-gradient(135deg, #ff6b6b 0%, #ee5253 100%); /* Alarm red/pink */
+        background: linear-gradient(135deg, #ff6b6b 0%, #ee5253 100%);
         color: white;
     }
     
     .result-negative {
-        background: linear-gradient(135deg, #48c774 0%, #43a047 100%); /* Success green */
+        background: linear-gradient(135deg, #48c774 0%, #43a047 100%);
         color: white;
     }
     
@@ -87,25 +95,15 @@ st.markdown("""
     }
     
     .confidence-value {
-        font-size: 3rem; /* Larger confidence for focus */
+        font-size: 3rem;
         font-weight: 900;
         margin: 1rem 0;
     }
     
-    /* Info/Warning boxes - Use standard Streamlit containers for better integration */
-    
-    /* Image display container */
-    .image-container {
-        border-radius: 12px;
-        overflow: hidden;
-        box-shadow: 0 8px 20px rgba(0,0,0,0.15);
-        margin: 1rem 0 3rem 0;
-    }
-    
-    /* Button styling (Improved hover and color contrast) */
+    /* Button styling */
     .stButton > button {
         width: 100%;
-        background: linear-gradient(135deg, #1e90ff 0%, #5352ed 100%); /* Primary blue */
+        background: linear-gradient(135deg, #1e90ff 0%, #5352ed 100%);
         color: white;
         font-weight: 700;
         padding: 0.75rem 2rem;
@@ -158,7 +156,6 @@ st.set_page_config(
     layout="centered"
 )
 
-# Use columns for alignment of the app header within the custom container
 st.markdown("""
 <div class="header-container">
     <div class="header-title">🫁 Tuberculosis Detection</div>
@@ -187,15 +184,10 @@ with st.container():
 def preprocess_image(img):
     """Resizes and preprocesses the image for the EfficientNet model."""
     try:
-        # Convert PIL Image to numpy array
         img = np.array(img)
-        # Convert RGB to BGR (sometimes required by TF models trained on OpenCV-style inputs)
         img = cv2.cvtColor(img, cv2.COLOR_RGB2BGR) 
-        # Resize to model input size
         img = cv2.resize(img, IMG_SIZE)
-        # Apply EfficientNet specific preprocessing
         img = preprocess_input(img.astype("float32"))
-        # Add batch dimension
         img = np.expand_dims(img, axis=0)
         return img
     except Exception as e:
@@ -229,14 +221,13 @@ if uploaded_file is not None:
         st.markdown("### 📸 Uploaded Image Preview")
         col_img, col_space = st.columns([1, 4])
         with col_img:
-            # Display image in a smaller, controlled area
             st.image(image, caption='X-Ray Image', use_container_width=True)
 
         # --- Process and predict ---
         processed_image = preprocess_image(image)
         
         if processed_image is not None:
-            # Use a button to trigger analysis, improving UX
+            # Use a button to trigger analysis
             if st.button("🚀 Run AI Analysis"):
                 
                 # Predict
@@ -302,11 +293,16 @@ if uploaded_file is not None:
                     with st.expander("🔍 Technical Details of the Analysis"):
                         col1, col2, col3 = st.columns(3)
                         
-                        col1.metric("Classification", label.split('(')[0].strip()) # Clean label for metric
+                        col1.metric("Classification", label.split('(')[0].strip())
                         col2.metric("Image Size (HxW)", f"{IMG_SIZE[0]}x{IMG_SIZE[1]}")
                         col3.metric("Raw Score (TB Prob)", f"{pred:.4f}")
                         
                         st.caption("Raw score is the output of the final sigmoid layer, representing the probability of TB.")
+                        
+                    # Option to analyze another image
+                    st.markdown("---")
+                    if st.button("🔄 Analyze Another Image"):
+                        st.rerun()
 
 # --- Placeholder for No Upload ---
 else:
@@ -315,18 +311,17 @@ else:
     <div class="upload-section">
         <h3>💡 Get Started</h3>
         <p>Please upload a clear chest X-ray image (e.g., in JPG or PNG format) using the browser button above to initiate the deep learning analysis.</p>
-        <p style="margin-top: 1.5rem; font-style: italic; color: #6c757d;">
+        <p style="margin-top: 1.5rem; font-style: italic; color: #6c757d !important;">
             (The AI model is based on EfficientNet architecture, pre-trained on medical imaging data.)
         </p>
     </div>
     """, unsafe_allow_html=True)
     
-    # Optional: Suggest an example to try
+    # Optional: Suggest an example to try (text removed as requested)
     with st.expander("🖼️ Example X-Ray Image (TB Positive)", expanded=False):
-        st.markdown("You can upload an example image of a chest X-ray with Tuberculosis for demonstration purposes.")
+        # Image place holder for illustrative purposes
+        st.markdown("Use this space to display a sample positive X-ray image for testing.")
         
-
-
 # =========================
 # FOOTER
 # =========================
