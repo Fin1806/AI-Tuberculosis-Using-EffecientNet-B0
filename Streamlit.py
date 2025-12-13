@@ -12,120 +12,125 @@ MODEL_PATH = r"new_efficientnet_model_fixed.h5"
 IMG_SIZE = (224, 224)
 
 # =========================
-# CUSTOM CSS
+# CUSTOM CSS (Refined for better spacing and focus)
 # =========================
 st.markdown("""
 <style>
     /* Main container styling */
     .main {
         padding-top: 2rem;
+        background-color: #f7f9fc; /* Light background for a cleaner look */
     }
     
-    /* Header styling */
+    /* Header styling - Gradient remains great, added slight blur for depth */
     .header-container {
         text-align: center;
         padding: 2rem 0 3rem 0;
-        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%); /* Changed gradient for a cooler tone */
         border-radius: 15px;
         margin-bottom: 2rem;
-        box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+        box-shadow: 0 10px 20px rgba(0,0,0,0.15);
+        backdrop-filter: blur(5px);
     }
     
     .header-title {
         color: white;
-        font-size: 3rem;
-        font-weight: 700;
+        font-size: 3.2rem; /* Slightly larger */
+        font-weight: 800;
         margin-bottom: 0.5rem;
-        text-shadow: 2px 2px 4px rgba(0,0,0,0.3);
+        text-shadow: 1px 1px 3px rgba(0,0,0,0.4);
     }
     
     .header-subtitle {
-        color: #f0f0f0;
-        font-size: 1.2rem;
+        color: #e0f7fa; /* Lighter subtitle color */
+        font-size: 1.1rem;
         font-weight: 400;
     }
     
     /* Upload section */
     .upload-section {
-        background: #f8f9fa;
-        padding: 2rem;
+        background: #ffffff;
+        padding: 3rem; /* Increased padding */
         border-radius: 12px;
-        border: 2px dashed #cbd5e0;
+        border: 3px dashed #bbdefb; /* Clearer border */
         margin: 2rem 0;
         text-align: center;
+        box-shadow: 0 4px 15px rgba(0,0,0,0.05);
     }
     
-    /* Result cards */
+    /* Result cards - More distinct color coding */
     .result-card {
         padding: 2rem;
         border-radius: 12px;
-        margin: 1rem 0;
-        box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+        margin: 1.5rem 0;
+        box-shadow: 0 6px 15px rgba(0,0,0,0.1);
+        transition: transform 0.3s ease;
+    }
+    .result-card:hover {
+        transform: translateY(-5px); /* Hover effect for results */
     }
     
     .result-positive {
-        background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+        background: linear-gradient(135deg, #ff6b6b 0%, #ee5253 100%); /* Alarm red/pink */
         color: white;
     }
     
     .result-negative {
-        background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
+        background: linear-gradient(135deg, #48c774 0%, #43a047 100%); /* Success green */
         color: white;
     }
     
     .result-title {
-        font-size: 2rem;
+        font-size: 2.2rem;
         font-weight: 700;
         margin-bottom: 0.5rem;
     }
     
     .confidence-value {
-        font-size: 2.5rem;
-        font-weight: 800;
+        font-size: 3rem; /* Larger confidence for focus */
+        font-weight: 900;
         margin: 1rem 0;
     }
     
-    /* Info boxes */
-    .info-box {
-        background: #e6f3ff;
-        border-left: 4px solid #3182ce;
-        padding: 1rem;
-        border-radius: 8px;
-        margin: 1rem 0;
-    }
+    /* Info/Warning boxes - Use standard Streamlit containers for better integration */
     
-    .warning-box {
-        background: #fff5e6;
-        border-left: 4px solid #ed8936;
-        padding: 1rem;
-        border-radius: 8px;
-        margin: 1rem 0;
-    }
-    
-    /* Image display */
+    /* Image display container */
     .image-container {
         border-radius: 12px;
         overflow: hidden;
-        box-shadow: 0 8px 16px rgba(0,0,0,0.15);
-        margin: 2rem 0;
+        box-shadow: 0 8px 20px rgba(0,0,0,0.15);
+        margin: 1rem 0 3rem 0;
     }
     
-    /* Button styling */
+    /* Button styling (Improved hover and color contrast) */
     .stButton > button {
         width: 100%;
-        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        background: linear-gradient(135deg, #1e90ff 0%, #5352ed 100%); /* Primary blue */
         color: white;
-        font-weight: 600;
+        font-weight: 700;
         padding: 0.75rem 2rem;
-        border-radius: 8px;
+        border-radius: 10px;
         border: none;
         font-size: 1.1rem;
+        transition: all 0.3s ease;
     }
     
     .stButton > button:hover {
-        transform: translateY(-2px);
-        box-shadow: 0 6px 12px rgba(0,0,0,0.2);
+        background: linear-gradient(135deg, #5352ed 0%, #1e90ff 100%);
+        transform: translateY(-3px);
+        box-shadow: 0 8px 15px rgba(0,0,0,0.3);
     }
+
+    /* Streamlit Metric Styling */
+    [data-testid="stMetricValue"] {
+        font-size: 1.5rem;
+        font-weight: 700;
+    }
+    [data-testid="stMetricLabel"] {
+        font-weight: 500;
+        font-size: 0.9rem;
+    }
+
 </style>
 """, unsafe_allow_html=True)
 
@@ -133,14 +138,19 @@ st.markdown("""
 # LOAD MODEL (CACHE)
 # =========================
 @st.cache_resource
-def load_model():
-    model = tf.keras.models.load_model(MODEL_PATH)
-    return model
+def load_ml_model():
+    """Load the pre-trained EfficientNet model."""
+    try:
+        model = tf.keras.models.load_model(MODEL_PATH)
+        return model
+    except Exception as e:
+        st.error(f"Error loading model: {e}")
+        return None
 
-model = load_model()
+model = load_ml_model()
 
 # =========================
-# UI HEADER
+# UI HEADER & CONFIG
 # =========================
 st.set_page_config(
     page_title="TB Detection System",
@@ -148,6 +158,7 @@ st.set_page_config(
     layout="centered"
 )
 
+# Use columns for alignment of the app header within the custom container
 st.markdown("""
 <div class="header-container">
     <div class="header-title">🫁 Tuberculosis Detection</div>
@@ -158,143 +169,172 @@ st.markdown("""
 # =========================
 # INFORMATION SECTION
 # =========================
-with st.expander("ℹ️ About This Tool", expanded=False):
-    st.markdown("""
-    This tool uses an **EfficientNet deep learning model** to analyze chest X-ray images 
-    and detect potential signs of tuberculosis.
-    
-    **How to use:**
-    1. Upload a chest X-ray image (JPG, JPEG, or PNG format)
-    2. Wait for the AI to analyze the image
-    3. Review the prediction and confidence score
-    
-    **Important:** This tool is for educational/screening purposes only and should not 
-    replace professional medical diagnosis. Always consult with a healthcare provider 
-    for proper medical advice.
-    """)
-
-# =========================
-# IMAGE UPLOAD
-# =========================
-st.markdown("### 📤 Upload Chest X-Ray Image")
-uploaded_file = st.file_uploader(
-    "Choose an image file",
-    type=["jpg", "jpeg", "png"],
-    help="Upload a clear chest X-ray image for analysis"
-)
+with st.container():
+    with st.expander("ℹ️ About This Tool & Disclaimer", expanded=False):
+        st.markdown("""
+        This tool uses an **EfficientNet deep learning model** to analyze chest X-ray images 
+        and detect potential signs of tuberculosis (TB).
+        
+        ### ⚠️ Important Medical Disclaimer
+        * **This tool is for educational/screening purposes only.**
+        * **It is NOT a substitute for professional medical diagnosis, advice, or treatment.**
+        * **Always consult with a qualified healthcare provider** for proper diagnosis, especially if you have symptoms or a positive result.
+        """)
 
 # =========================
 # IMAGE PROCESSING FUNCTION
 # =========================
 def preprocess_image(img):
-    img = np.array(img)
-    img = cv2.cvtColor(img, cv2.COLOR_RGB2BGR)
-    img = cv2.resize(img, IMG_SIZE)
-    img = preprocess_input(img.astype("float32"))
-    img = np.expand_dims(img, axis=0)
-    return img
+    """Resizes and preprocesses the image for the EfficientNet model."""
+    try:
+        # Convert PIL Image to numpy array
+        img = np.array(img)
+        # Convert RGB to BGR (sometimes required by TF models trained on OpenCV-style inputs)
+        img = cv2.cvtColor(img, cv2.COLOR_RGB2BGR) 
+        # Resize to model input size
+        img = cv2.resize(img, IMG_SIZE)
+        # Apply EfficientNet specific preprocessing
+        img = preprocess_input(img.astype("float32"))
+        # Add batch dimension
+        img = np.expand_dims(img, axis=0)
+        return img
+    except Exception as e:
+        st.error(f"Error processing image: {e}")
+        return None
+
+# =========================
+# IMAGE UPLOAD SECTION
+# =========================
+st.markdown("---")
+
+with st.container():
+    st.markdown("### 📤 Upload Chest X-Ray Image")
+    uploaded_file = st.file_uploader(
+        "Choose an image file (JPG, JPEG, or PNG)",
+        type=["jpg", "jpeg", "png"],
+        help="Upload a clear Posteroanterior (PA) or Anteroposterior (AP) chest X-ray image for analysis."
+    )
 
 # =========================
 # PREDICTION AND RESULTS
 # =========================
 if uploaded_file is not None:
-    # Display uploaded image
-    image = Image.open(uploaded_file).convert("RGB")
-    
-    st.markdown("### 📸 Uploaded Image")
-    col1, col2, col3 = st.columns([1, 3, 1])
-    with col2:
-        st.image(image, use_container_width=True)
-    
-    st.markdown("---")
-    
-    # Process and predict
-    processed_image = preprocess_image(image)
-    
-    with st.spinner("🔬 Analyzing X-ray image... Please wait..."):
-        pred = model.predict(processed_image, verbose=0)[0][0]
-    
-    # Display results
-    st.markdown("### 📊 Analysis Results")
-    
-    if pred >= 0.5:
-        label = "Tuberculosis Detected"
-        confidence = pred * 100
-        
-        st.markdown(f"""
-        <div class="result-card result-positive">
-            <div class="result-title">⚠️ {label}</div>
-            <div class="confidence-value">{confidence:.1f}% Confidence</div>
-            <p style="font-size: 1.1rem;">The model has detected signs consistent with tuberculosis.</p>
-        </div>
-        """, unsafe_allow_html=True)
-        
-        st.markdown("""
-        <div class="warning-box">
-            <strong>⚕️ Next Steps:</strong><br>
-            • Consult a healthcare professional immediately<br>
-            • Additional tests may be required for confirmation<br>
-            • Early detection improves treatment outcomes
-        </div>
-        """, unsafe_allow_html=True)
-        
+    if model is None:
+        st.error("The model could not be loaded. Please check the model path.")
     else:
-        label = "Normal"
-        confidence = (1 - pred) * 100
+        # --- Display uploaded image ---
+        image = Image.open(uploaded_file).convert("RGB")
         
-        st.markdown(f"""
-        <div class="result-card result-negative">
-            <div class="result-title">✅ {label}</div>
-            <div class="confidence-value">{confidence:.1f}% Confidence</div>
-            <p style="font-size: 1.1rem;">No signs of tuberculosis detected in this X-ray.</p>
-        </div>
-        """, unsafe_allow_html=True)
-        
-        st.markdown("""
-        <div class="info-box">
-            <strong>💡 Important Note:</strong><br>
-            A normal result does not guarantee absence of disease. If you have symptoms 
-            or concerns, please consult with a healthcare provider for proper evaluation.
-        </div>
-        """, unsafe_allow_html=True)
-    
-    # Confidence bar
-    st.markdown("### 📈 Confidence Level")
-    st.progress(float(confidence / 100))
-    
-    # Technical details
-    with st.expander("🔍 Technical Details"):
-        col1, col2 = st.columns(2)
-        with col1:
-            st.metric("Raw Prediction Score", f"{pred:.4f}")
-            st.metric("Image Size", f"{IMG_SIZE[0]}x{IMG_SIZE[1]}")
-        with col2:
-            st.metric("Model Type", "EfficientNet")
-            st.metric("Classification", label)
-    
-    # Option to analyze another image
-    st.markdown("---")
-    if st.button("🔄 Analyze Another Image"):
-        st.rerun()
+        st.markdown("---")
+        st.markdown("### 📸 Uploaded Image Preview")
+        col_img, col_space = st.columns([1, 4])
+        with col_img:
+            # Display image in a smaller, controlled area
+            st.image(image, caption='X-Ray Image', use_container_width=True)
 
+        # --- Process and predict ---
+        processed_image = preprocess_image(image)
+        
+        if processed_image is not None:
+            # Use a button to trigger analysis, improving UX
+            if st.button("🚀 Run AI Analysis"):
+                
+                # Predict
+                with st.spinner("🔬 Analyzing X-ray image... Please wait..."):
+                    try:
+                        pred = model.predict(processed_image, verbose=0)[0][0]
+                    except Exception as e:
+                        st.error(f"Prediction failed: {e}")
+                        pred = None
+
+                if pred is not None:
+                    # --- Display results ---
+                    st.markdown("---")
+                    st.markdown("### 📊 Analysis Results")
+                    
+                    if pred >= 0.5:
+                        # Positive Result
+                        label = "Tuberculosis Detected"
+                        confidence = pred * 100
+                        
+                        st.markdown(f"""
+                        <div class="result-card result-positive">
+                            <div class="result-title">🚨 {label}</div>
+                            <div class="confidence-value">{confidence:.1f}% Confidence</div>
+                            <p style="font-size: 1.1rem; font-weight: 500;">
+                                The model has detected signs highly consistent with Tuberculosis.
+                            </p>
+                        </div>
+                        """, unsafe_allow_html=True)
+                        
+                        st.warning("""
+                        **⚠️ Immediate Recommended Action:**
+                        1.  **Consult a healthcare professional** (e.g., doctor or specialist) immediately.
+                        2.  Share this X-ray and the AI's result with them.
+                        3.  A definitive diagnosis requires additional clinical tests.
+                        """)
+                        
+                    else:
+                        # Negative Result
+                        label = "Normal (No TB Signs Detected)"
+                        confidence = (1 - pred) * 100
+                        
+                        st.markdown(f"""
+                        <div class="result-card result-negative">
+                            <div class="result-title">✨ {label}</div>
+                            <div class="confidence-value">{confidence:.1f}% Confidence</div>
+                            <p style="font-size: 1.1rem; font-weight: 500;">
+                                The model indicates a high probability of a normal chest X-ray.
+                            </p>
+                        </div>
+                        """, unsafe_allow_html=True)
+                        
+                        st.info("""
+                        **✅ Important Note:**
+                        * A 'Normal' result is reassuring but **does not exclude disease**.
+                        * If symptoms persist (e.g., persistent cough, fever, weight loss), please seek medical consultation.
+                        """)
+                    
+                    # --- Confidence bar and Technical Details ---
+                    st.markdown("### 📈 Confidence Breakdown")
+                    st.progress(float(confidence / 100), text=f"Model Certainty: {confidence:.1f}%")
+                    
+                    with st.expander("🔍 Technical Details of the Analysis"):
+                        col1, col2, col3 = st.columns(3)
+                        
+                        col1.metric("Classification", label.split('(')[0].strip()) # Clean label for metric
+                        col2.metric("Image Size (HxW)", f"{IMG_SIZE[0]}x{IMG_SIZE[1]}")
+                        col3.metric("Raw Score (TB Prob)", f"{pred:.4f}")
+                        
+                        st.caption("Raw score is the output of the final sigmoid layer, representing the probability of TB.")
+
+# --- Placeholder for No Upload ---
 else:
-    # Show placeholder when no image is uploaded
+    # Show a friendly, interactive prompt when no image is uploaded
     st.markdown("""
     <div class="upload-section">
-        <h3>👆 Please upload a chest X-ray image to begin analysis</h3>
-        <p>Supported formats: JPG, JPEG, PNG</p>
+        <h3>💡 Get Started</h3>
+        <p>Please upload a clear chest X-ray image (e.g., in JPG or PNG format) using the browser button above to initiate the deep learning analysis.</p>
+        <p style="margin-top: 1.5rem; font-style: italic; color: #6c757d;">
+            (The AI model is based on EfficientNet architecture, pre-trained on medical imaging data.)
+        </p>
     </div>
     """, unsafe_allow_html=True)
+    
+    # Optional: Suggest an example to try
+    with st.expander("🖼️ Example X-Ray Image (TB Positive)", expanded=False):
+        st.markdown("You can upload an example image of a chest X-ray with Tuberculosis for demonstration purposes.")
+        
+
 
 # =========================
 # FOOTER
 # =========================
 st.markdown("---")
 st.markdown("""
-<div style="text-align: center; color: #666; padding: 2rem 0;">
+<div style="text-align: center; color: #666; padding: 1rem 0;">
     <small>
-    This AI diagnostic tool is for educational and screening purposes only.<br>
-    Always seek professional medical advice for health concerns.
+    Built with Streamlit and TensorFlow. AI is a screening aid, not a definitive diagnosis.
     </small>
 </div>
 """, unsafe_allow_html=True)
