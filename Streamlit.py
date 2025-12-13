@@ -8,7 +8,7 @@ from PIL import Image
 # =========================
 # CONFIG
 # =========================
-MODEL_PATH = r"D:\AI\AI AOL\new_efficientnet_model_fixed.h5"
+MODEL_PATH = r"new_efficientnet_model_fixed.h5"
 IMG_SIZE = (224, 224)
 
 # =========================
