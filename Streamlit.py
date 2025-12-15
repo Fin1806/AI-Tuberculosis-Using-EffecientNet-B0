@@ -2,327 +2,190 @@ import streamlit as st
 import tensorflow as tf
 import numpy as np
 import cv2
-from tensorflow.keras.applications.efficientnet import preprocess_input
+import matplotlib.cm as cm
 from PIL import Image
+from tensorflow.keras.applications.efficientnet import preprocess_input
 
-# =========================
-# CONFIG
-# =========================
-MODEL_PATH = r"new_efficientnet_model_fixed.h5"
+# --- 1. CONFIGURATION & SETUP ---
+st.set_page_config(page_title="TB Detector AI + Grad-CAM", page_icon="🫁", layout="wide")
+
+# Disable scientific notation for clarity
+np.set_printoptions(suppress=True)
+
+# Define Image Size & Layer
 IMG_SIZE = (224, 224)
+# 'top_activation' is the standard last convolutional layer in EfficientNetB0
+# If you encounter an error, try changing this to 'block7a_project_conv' or 'top_conv'
+LAST_CONV_LAYER = 'top_activation' 
 
-# =========================
-# CUSTOM CSS
-# =========================
-st.markdown("""
-<style>
-    /* Main container styling */
-    .main {
-        padding-top: 2rem;
-        background-color: #f7f9fc;
-    }
-    
-    /* Header styling */
-    .header-container {
-        text-align: center;
-        padding: 2rem 0 3rem 0;
-        background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
-        border-radius: 15px;
-        margin-bottom: 2rem;
-        box-shadow: 0 10px 20px rgba(0,0,0,0.15);
-        backdrop-filter: blur(5px);
-    }
-    
-    .header-title {
-        color: white;
-        font-size: 3.2rem;
-        font-weight: 800;
-        margin-bottom: 0.5rem;
-        text-shadow: 1px 1px 3px rgba(0,0,0,0.4);
-    }
-    
-    .header-subtitle {
-        color: #e0f7fa;
-        font-size: 1.1rem;
-        font-weight: 400;
-    }
-    
-    /* Upload section */
-    .upload-section {
-        background: #ffffff;
-        padding: 3rem;
-        border-radius: 12px;
-        border: 3px dashed #bbdefb;
-        margin: 2rem 0;
-        text-align: center;
-        box-shadow: 0 4px 15px rgba(0,0,0,0.05);
-    }
-    
-    /* Text color fix for dark mode contrast */
-    .upload-section h3 {
-        color: #333333 !important;
-    }
-    .upload-section p {
-        color: #6c757d !important;
-    }
-
-    /* Result cards - More distinct color coding */
-    .result-card {
-        padding: 2rem;
-        border-radius: 12px;
-        margin: 1.5rem 0;
-        box-shadow: 0 6px 15px rgba(0,0,0,0.1);
-        transition: transform 0.3s ease;
-    }
-    .result-card:hover {
-        transform: translateY(-5px);
-    }
-    
-    .result-positive {
-        background: linear-gradient(135deg, #ff6b6b 0%, #ee5253 100%);
-        color: white;
-    }
-    
-    .result-negative {
-        background: linear-gradient(135deg, #48c774 0%, #43a047 100%);
-        color: white;
-    }
-    
-    .result-title {
-        font-size: 2.2rem;
-        font-weight: 700;
-        margin-bottom: 0.5rem;
-    }
-    
-    .confidence-value {
-        font-size: 3rem;
-        font-weight: 900;
-        margin: 1rem 0;
-    }
-    
-    /* Button styling */
-    .stButton > button {
-        width: 100%;
-        background: linear-gradient(135deg, #1e90ff 0%, #5352ed 100%);
-        color: white;
-        font-weight: 700;
-        padding: 0.75rem 2rem;
-        border-radius: 10px;
-        border: none;
-        font-size: 1.1rem;
-        transition: all 0.3s ease;
-    }
-    
-    .stButton > button:hover {
-        background: linear-gradient(135deg, #5352ed 0%, #1e90ff 100%);
-        transform: translateY(-3px);
-        box-shadow: 0 8px 15px rgba(0,0,0,0.3);
-    }
-
-    /* Streamlit Metric Styling */
-    [data-testid="stMetricValue"] {
-        font-size: 1.5rem;
-        font-weight: 700;
-    }
-    [data-testid="stMetricLabel"] {
-        font-weight: 500;
-        font-size: 0.9rem;
-    }
-
-</style>
-""", unsafe_allow_html=True)
-
-# =========================
-# LOAD MODEL (CACHE)
-# =========================
+# --- 2. MODEL LOADING ---
 @st.cache_resource
-def load_ml_model():
-    """Load the pre-trained EfficientNet model."""
+def load_tb_model():
+    """
+    Loads the trained model. Uses st.cache_resource to avoid reloading
+    the model every time the user interacts with the app.
+    """
     try:
-        model = tf.keras.models.load_model(MODEL_PATH)
+        # Load the 'v6 normal' model as requested
+        model = tf.keras.models.load_model('v6_efficientnetb0_tb_best.keras')
         return model
     except Exception as e:
         st.error(f"Error loading model: {e}")
         return None
 
-model = load_ml_model()
+model = load_tb_model()
 
-# =========================
-# UI HEADER & CONFIG
-# =========================
-st.set_page_config(
-    page_title="TB Detection System",
-    page_icon="🫁",
-    layout="centered"
-)
+# --- 3. PREPROCESSING FUNCTION ---
+def process_image(image_file):
+    """
+    1. Resizes image to 224x224.
+    2. Applies Custom Masking (Top Left/Right corners).
+    3. Applies EfficientNet preprocessing.
+    """
+    # Convert to RGB and Resize
+    img = Image.open(image_file).convert('RGB')
+    img = img.resize(IMG_SIZE)
+    img_array = np.array(img).astype(np.float32)
 
-st.markdown("""
-<div class="header-container">
-    <div class="header-title">🫁 Tuberculosis Detection</div>
-    <div class="header-subtitle">AI-Powered Chest X-Ray Analysis System</div>
-</div>
-""", unsafe_allow_html=True)
+    # --- CUSTOM MASKING ---
+    # Create a writable copy to avoid read-only errors
+    img_array_masked = img_array.copy()
+    height, width, _ = img_array_masked.shape
+    
+    # Define mask size (25% of image)
+    mask_h = int(height * 0.25) 
+    mask_w = int(width * 0.25)
+    
+    # Masking Top Left Corner
+    img_array_masked[0:mask_h, 0:mask_w, :] = 0.0
+    # Masking Top Right Corner
+    img_array_masked[0:mask_h, width-mask_w:width, :] = 0.0
+    
+    # EfficientNet Preprocessing
+    preprocessed_img = preprocess_input(img_array_masked)
+    # Add batch dimension (1, 224, 224, 3)
+    img_batch = np.expand_dims(preprocessed_img, axis=0)
+    
+    return img_batch, img_array_masked.astype(np.uint8)
 
-# =========================
-# INFORMATION SECTION
-# =========================
-with st.container():
-    with st.expander("ℹ️ About This Tool & Disclaimer", expanded=False):
-        st.markdown("""
-        This tool uses an **EfficientNet deep learning model** to analyze chest X-ray images 
-        and detect potential signs of tuberculosis (TB).
-        
-        ### ⚠️ Important Medical Disclaimer
-        * **This tool is for educational/screening purposes only.**
-        * **It is NOT a substitute for professional medical diagnosis, advice, or treatment.**
-        * **Always consult with a qualified healthcare provider** for proper diagnosis, especially if you have symptoms or a positive result.
-        """)
-
-# =========================
-# IMAGE PROCESSING FUNCTION
-# =========================
-def preprocess_image(img):
-    """Resizes and preprocesses the image for the EfficientNet model."""
-    try:
-        img = np.array(img)
-        img = cv2.cvtColor(img, cv2.COLOR_RGB2BGR) 
-        img = cv2.resize(img, IMG_SIZE)
-        img = preprocess_input(img.astype("float32"))
-        img = np.expand_dims(img, axis=0)
-        return img
-    except Exception as e:
-        st.error(f"Error processing image: {e}")
-        return None
-
-# =========================
-# IMAGE UPLOAD SECTION
-# =========================
-st.markdown("---")
-
-with st.container():
-    st.markdown("### 📤 Upload Chest X-Ray Image")
-    uploaded_file = st.file_uploader(
-        "Choose an image file (JPG, JPEG, or PNG)",
-        type=["jpg", "jpeg", "png"],
-        help="Upload a clear Posteroanterior (PA) or Anteroposterior (AP) chest X-ray image for analysis."
+# --- 4. GRAD-CAM FUNCTIONS ---
+def make_gradcam_heatmap(img_array, model, last_conv_layer_name, pred_index=None):
+    """
+    Generates the Grad-CAM heatmap for explainability.
+    """
+    # Create a model that maps the input image to the activations of the last conv layer
+    # and the output predictions
+    grad_model = tf.keras.models.Model(
+        [model.inputs], [model.get_layer(last_conv_layer_name).output, model.output]
     )
 
-# =========================
-# PREDICTION AND RESULTS (AUTO-RUN)
-# =========================
-if uploaded_file is not None:
-    if model is None:
-        st.error("The model could not be loaded. Please check the model path.")
-    else:
-        # --- Display uploaded image ---
-        image = Image.open(uploaded_file).convert("RGB")
-        
-        st.markdown("---")
-        st.markdown("### 📸 Uploaded Image Preview")
-        col_img, col_space = st.columns([1, 4])
-        with col_img:
-            st.image(image, caption='X-Ray Image', use_container_width=True)
+    # Record operations for automatic differentiation
+    with tf.GradientTape() as tape:
+        last_conv_layer_output, preds = grad_model(img_array)
+        if pred_index is None:
+            pred_index = tf.argmax(preds[0])
+        class_channel = preds[:, pred_index]
 
-        # --- Process and predict ---
-        processed_image = preprocess_image(image)
-        
-        if processed_image is not None:
-            
-            # Predict automatically when file is uploaded
-            with st.spinner("🔬 Analyzing X-ray image... Please wait..."):
-                try:
-                    pred = model.predict(processed_image, verbose=0)[0][0]
-                except Exception as e:
-                    st.error(f"Prediction failed: {e}")
-                    pred = None
-
-            if pred is not None:
-                # --- Display results ---
-                st.markdown("---")
-                st.markdown("### 📊 Analysis Results")
-                
-                if pred >= 0.5:
-                    # Positive Result
-                    label = "Tuberculosis Detected"
-                    confidence = pred * 100
-                    
-                    st.markdown(f"""
-                    <div class="result-card result-positive">
-                        <div class="result-title">🚨 {label}</div>
-                        <div class="confidence-value">{confidence:.1f}% Confidence</div>
-                        <p style="font-size: 1.1rem; font-weight: 500;">
-                            The model has detected signs highly consistent with Tuberculosis.
-                        </p>
-                    </div>
-                    """, unsafe_allow_html=True)
-                    
-                    st.warning("""
-                    **⚠️ Immediate Recommended Action:**
-                    1.  **Consult a healthcare professional** (e.g., doctor or specialist) immediately.
-                    2.  Share this X-ray and the AI's result with them.
-                    3.  A definitive diagnosis requires additional clinical tests.
-                    """)
-                    
-                else:
-                    # Negative Result
-                    label = "Normal (No TB Signs Detected)"
-                    confidence = (1 - pred) * 100
-                    
-                    st.markdown(f"""
-                    <div class="result-card result-negative">
-                        <div class="result-title">✨ {label}</div>
-                        <div class="confidence-value">{confidence:.1f}% Confidence</div>
-                        <p style="font-size: 1.1rem; font-weight: 500;">
-                            The model indicates a high probability of a normal chest X-ray.
-                        </p>
-                    </div>
-                    """, unsafe_allow_html=True)
-                    
-                    st.info("""
-                    **✅ Important Note:**
-                    * A 'Normal' result is reassuring but **does not exclude disease**.
-                    * If symptoms persist (e.g., persistent cough, fever, weight loss), please seek medical consultation.
-                    """)
-                
-                # --- Confidence bar and Technical Details ---
-                st.markdown("### 📈 Confidence Breakdown")
-                st.progress(float(confidence / 100), text=f"Model Certainty: {confidence:.1f}%")
-                
-                with st.expander("🔍 Technical Details of the Analysis"):
-                    col1, col2, col3 = st.columns(3)
-                    
-                    col1.metric("Classification", label.split('(')[0].strip())
-                    col2.metric("Image Size (HxW)", f"{IMG_SIZE[0]}x{IMG_SIZE[1]}")
-                    col3.metric("Raw Score (TB Prob)", f"{pred:.4f}")
-                    
-                    st.caption("Raw score is the output of the final sigmoid layer, representing the probability of TB.")
-                    
-                # Option to analyze another image
-                st.markdown("---")
-                if st.button("🔄 Analyze Another Image"):
-                    st.rerun()
-
-# --- Placeholder for No Upload ---
-else:
-    # Show a friendly, interactive prompt when no image is uploaded
-    st.markdown("""
-    <div class="upload-section">
-        <h3>💡 Get Started</h3>
-        <p>Please upload a clear chest X-ray image (e.g., in JPG or PNG format) using the browser button above to initiate the deep learning analysis.</p>
-        <p style="margin-top: 1.5rem; font-style: italic; color: #6c757d !important;">
-            (The AI model is based on EfficientNet architecture, pre-trained on medical imaging data.)
-        </p>
-    </div>
-    """, unsafe_allow_html=True)
+    # This is the gradient of the output neuron (top predicted or chosen)
+    # with regard to the output feature map of the last conv layer
+    grads = tape.gradient(class_channel, last_conv_layer_output)
     
-# =========================
-# FOOTER
-# =========================
-st.markdown("---")
-st.markdown("""
-<div style="text-align: center; color: #666; padding: 1rem 0;">
-    <small>
-    Built with Streamlit and TensorFlow. AI is a screening aid, not a definitive diagnosis.
-    </small>
-</div>
-""", unsafe_allow_html=True)
+    # Vector of weights: mean intensity of the gradient over a specific feature map channel
+    pooled_grads = tf.reduce_mean(grads, axis=(0, 1, 2))
+
+    # Multiply each channel in the feature map array by "how important this channel is"
+    last_conv_layer_output = last_conv_layer_output[0]
+    heatmap = last_conv_layer_output @ pooled_grads[..., tf.newaxis]
+    heatmap = tf.squeeze(heatmap)
+
+    # Normalize the heatmap between 0 & 1
+    heatmap = tf.maximum(heatmap, 0) / tf.math.reduce_max(heatmap)
+    return heatmap.numpy()
+
+def overlay_heatmap(img_display, heatmap, alpha=0.4):
+    """
+    Overlays the heatmap onto the original image.
+    """
+    # Resize heatmap to match the original image size
+    heatmap_resized = cv2.resize(heatmap, (img_display.shape[1], img_display.shape[0]))
+    
+    # Rescale heatmap to a range 0-255
+    heatmap_uint8 = np.uint8(255 * heatmap_resized)
+    
+    # Use jet colormap to colorize heatmap
+    heatmap_color = cv2.applyColorMap(heatmap_uint8, cv2.COLORMAP_JET)
+    heatmap_color = cv2.cvtColor(heatmap_color, cv2.COLOR_BGR2RGB)
+    
+    # Superimpose the heatmap on original image
+    superimposed_img = cv2.addWeighted(img_display, 1 - alpha, heatmap_color, alpha, 0)
+    
+    return superimposed_img
+
+# --- 5. STREAMLIT UI ---
+st.title("🫁 TB Detector AI + Grad-CAM")
+st.markdown("Detect Tuberculosis and visualize the infected lung areas using **Explainable AI (Grad-CAM)**.")
+
+# Layout: Upload on the left, Results on the right
+col_upload, col_result = st.columns([1, 2])
+
+with col_upload:
+    st.subheader("Input Image")
+    uploaded_file = st.file_uploader("Upload Chest X-Ray (JPG/PNG)", type=["jpg", "jpeg", "png"])
+    if uploaded_file:
+        st.image(uploaded_file, caption="Original Uploaded Image", use_container_width=True)
+
+if uploaded_file is not None and model is not None:
+    # Process the image
+    processed_input, display_img = process_image(uploaded_file)
+    
+    # Make Prediction
+    prediction = model.predict(processed_input)
+    probability = prediction[0][0]
+    
+    # Threshold logic (0.5 is standard)
+    threshold = 0.5
+    if probability > threshold:
+        label = "TUBERCULOSIS"
+        confidence = probability * 100
+        color = "red"
+    else:
+        label = "NORMAL"
+        confidence = (1 - probability) * 100
+        color = "green"
+
+    with col_result:
+        st.subheader("Prediction Result")
+        
+        # Displaey Status with Color
+        st.markdown(f"### Status: :{color}[{label}]")
+        
+        # Display Confidence Bar
+        st.progress(int(probability * 100))
+        st.caption(f"TB Probability Score: {probability:.4f} (Threshold: {threshold})")
+        
+        # --- GENERATE GRAD-CAM ---
+        try:
+            with st.spinner("Generating Grad-CAM Heatmap..."):
+                # Generate Heatmap
+                heatmap = make_gradcam_heatmap(processed_input, model, LAST_CONV_LAYER)
+                
+                # Overlay Heatmap
+                gradcam_img = overlay_heatmap(display_img, heatmap)
+                
+                # Display Visualizations Side-by-Side
+                st.subheader("AI Visualization (Grad-CAM)")
+                st.write("The **Red/Yellow** areas indicate the regions most important to the AI's decision.")
+                
+                gc_col1, gc_col2 = st.columns(2)
+                with gc_col1:
+                    st.image(display_img, caption="Processed Input (Masked)", use_container_width=True)
+                with gc_col2:
+                    st.image(gradcam_img, caption="Grad-CAM Overlay", use_container_width=True)
+                    
+        except Exception as e:
+            st.error(f"Failed to generate Grad-CAM: {e}")
+            st.info("Tip: Ensure the layer name 'top_activation' matches your model architecture.")
+
+else:
+    if not uploaded_file:
+        st.info("Please upload a Chest X-Ray image to begin analysis.")
