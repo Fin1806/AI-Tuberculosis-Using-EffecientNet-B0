@@ -106,19 +106,19 @@ class ResNet50_TB(nn.Module):
 MODELS_CONFIG = {
     "EfficientNet-B0": {
         "type": "tf_eff", 
-        "path": "v7_efficientnetb0_tb_best.keras", 
+        "path": r"v7_efficientnetb0_tb_best.keras", 
         "layer": "top_activation",
         "cam": True # Nyalakan Grad-CAM
     },
     "TB-Net (Custom)": {
         "type": "tf_custom", 
-        "path": "tb_net_fixed.keras",
+        "path": r"tb_net_fixed.keras",
         "layer": "conv2d_final", 
         "cam": False 
     },
     "ResNet50 (PyTorch)": {
         "type": "torch",
-        "path": "best_resnet50_tb.pth", 
+        "path": r"best_resnet50_tb.pth", 
         "layer": None,
         "cam": False
     }
