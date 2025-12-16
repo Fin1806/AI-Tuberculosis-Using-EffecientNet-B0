@@ -52,7 +52,7 @@ LAST_CONV_LAYER = 'top_activation'
 def load_tb_model():
     try:
         # Load model without compiling needed for inference only
-        model = tf.keras.models.load_model('v6_efficientnetb0_tb_best.keras', compile=False)
+        model = tf.keras.models.load_model('v7_efficientnetb0_tb_best.keras', compile=False)
         # Remove activation for better Grad-CAM
         model.layers[-1].activation = None
         return model
