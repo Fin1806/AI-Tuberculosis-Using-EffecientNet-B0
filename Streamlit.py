@@ -53,7 +53,7 @@ MODELS_CONFIG = {
     },
     "TB-Net (Custom)": {
         "type": "tf_custom", 
-        "path": os.path.join(BASE_DIR, "tb_net_fixed.keras"),
+        "path": os.path.join(BASE_DIR, "best_tbnet_model.keras"),
         "layer": "conv2d_final", 
         "cam": False 
     },
