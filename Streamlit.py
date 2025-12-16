@@ -82,24 +82,23 @@ st.markdown("""
 # 2. DEFINISI CLASS PYTORCH (WAJIB SESUAI)
 # ==========================================
 # ⚠️ PASTIKAN STRUKTUR INI SAMA DENGAN NOTEBOOK TRAINING KAMU
-class ResNet50_TB(nn.Module): 
-    def __init__(self):
+class ResNet50_TB(nn.Module):
+    def __init__(self, num_classes=1): # Cek num_classes kamu (1 atau 2?)
         super(ResNet50_TB, self).__init__()
-        # Load backbone ResNet50
-        self.base_model = models.resnet50(weights=None) 
+        self.resnet = models.resnet50(weights=models.ResNet50_Weights.IMAGENET1K_V1)
         
-        # Definisikan Head (Layer Akhir)
-        # Sesuaikan angka '128' atau '2' dengan arsitektur kamu
-        self.base_model.fc = nn.Sequential(
-            nn.Linear(2048, 128),
+        # Ganti head sesuai kebiasaan umum
+        in_features = self.resnet.fc.in_features
+        self.resnet.fc = nn.Sequential(
+            nn.Linear(in_features, 128),
             nn.ReLU(),
             nn.Dropout(0.3),
-            nn.Linear(128, 1), # Output 1 neuron untuk Binary Classification
-            nn.Sigmoid()       # Sigmoid agar output jadi 0.0 - 1.0
+            nn.Linear(128, num_classes),
+            nn.Sigmoid() # Hapus baris ini jika saat training kamu pakai BCEWithLogitsLoss
         )
-        
+
     def forward(self, x):
-        return self.base_model(x)
+        return self.resnet(x)
 
 # ==========================================
 # 3. KONFIGURASI MODEL & PATH
