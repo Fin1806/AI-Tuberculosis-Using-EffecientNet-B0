@@ -27,7 +27,7 @@ MODELS_CONFIG = {
     },
     "TB-Net": {
         "type": "tensorflow",
-        "path": "tb_net_fixed.keras", # Pastikan file .keras/.h5 (bukan zip/folder)
+        "path": "tb_net.keras", # Pastikan file .keras/.h5 (bukan zip/folder)
         "layer": None,
         "use_gradcam": False # Matikan GradCAM
     },
