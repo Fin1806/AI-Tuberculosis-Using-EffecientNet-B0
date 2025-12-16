@@ -9,205 +9,300 @@ import pandas as pd
 from PIL import Image
 from tensorflow.keras.applications.efficientnet import preprocess_input
 
-# --- 1. CONFIGURATION ---
-st.set_page_config(page_title="Hybrid Model Comparator", layout="wide")
+# ==========================================
+# 1. SETUP HALAMAN & CSS (TAMPILAN UI)
+# ==========================================
+st.set_page_config(
+    page_title="TB Detection Dashboard",
+    page_icon="🩻",
+    layout="wide",
+    initial_sidebar_state="collapsed"
+)
 
-# Constants
-IMG_SIZE = (224, 224)
+# Custom CSS untuk membuat tampilan "Flex" dan "Center"
+st.markdown("""
+    <style>
+    /* Mengatur background global */
+    .stApp {
+        background-color: #f8f9fa;
+    }
+    
+    /* Judul di tengah */
+    h1 {
+        text-align: center;
+        color: #2c3e50;
+        font-family: 'Helvetica', sans-serif;
+        margin-bottom: 10px;
+    }
+    p {
+        text-align: center;
+        color: #7f8c8d;
+    }
+
+    /* Style untuk Kartu Hasil (Card) */
+    .result-card {
+        background-color: white;
+        padding: 25px;
+        border-radius: 15px;
+        box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+        text-align: center;
+        transition: transform 0.3s;
+        margin-bottom: 20px;
+    }
+    .result-card:hover {
+        transform: translateY(-5px);
+    }
+    .model-name {
+        font-weight: bold;
+        color: #34495e;
+        margin-bottom: 10px;
+        font-size: 1.1rem;
+        text-transform: uppercase;
+        letter-spacing: 1px;
+    }
+    .prediction-label {
+        font-size: 1.5rem;
+        font-weight: 800;
+        margin: 10px 0;
+    }
+    .confidence-score {
+        font-size: 2.5rem;
+        font-weight: bold;
+        color: #2c3e50;
+    }
+    
+    /* Menghilangkan padding atas default Streamlit */
+    .block-container {
+        padding-top: 2rem;
+    }
+    </style>
+""", unsafe_allow_html=True)
 
 # ==========================================
-# ⚙️ CONFIG MODEL
+# 2. DEFINISI CLASS PYTORCH (WAJIB SESUAI)
+# ==========================================
+# ⚠️ PASTIKAN STRUKTUR INI SAMA DENGAN NOTEBOOK TRAINING KAMU
+class ResNet50_TB(nn.Module): 
+    def __init__(self):
+        super(ResNet50_TB, self).__init__()
+        # Load backbone ResNet50
+        self.base_model = models.resnet50(weights=None) 
+        
+        # Definisikan Head (Layer Akhir)
+        # Sesuaikan angka '128' atau '2' dengan arsitektur kamu
+        self.base_model.fc = nn.Sequential(
+            nn.Linear(2048, 128),
+            nn.ReLU(),
+            nn.Dropout(0.3),
+            nn.Linear(128, 1), # Output 1 neuron untuk Binary Classification
+            nn.Sigmoid()       # Sigmoid agar output jadi 0.0 - 1.0
+        )
+        
+    def forward(self, x):
+        return self.base_model(x)
+
+# ==========================================
+# 3. KONFIGURASI MODEL & PATH
 # ==========================================
 MODELS_CONFIG = {
     "EfficientNet-B0": {
-        "type": "tensorflow",
-        "path": "v7_efficientnetb0_tb_best.keras",
-        "layer": "top_activation", # Hanya ini yang butuh nama layer
-        "use_gradcam": True
+        "type": "tf_eff", 
+        "path": "v7_efficientnetb0_tb_best.keras", 
+        "layer": "top_activation",
+        "cam": True # Nyalakan Grad-CAM
     },
-    "TB-Net": {
-        "type": "tensorflow",
-        "path": "tb_net.keras", # Pastikan file .keras/.h5 (bukan zip/folder)
-        "layer": None,
-        "use_gradcam": False # Matikan GradCAM
+    "TB-Net (Custom)": {
+        "type": "tf_custom", 
+        "path": "tb_net_fixed.keras",
+        "layer": "conv2d_final", 
+        "cam": False 
     },
     "ResNet50 (PyTorch)": {
-        "type": "pytorch",
-        "path": "best_resnet50_tb.pth", # File .pth kamu
+        "type": "torch",
+        "path": "best_resnet50_tb.pth", 
         "layer": None,
-        "use_gradcam": False # Matikan GradCAM
+        "cam": False
     }
 }
 
-# --- 2. LOADERS ---
+IMG_SIZE = (224, 224)
 
+# ==========================================
+# 4. LOADERS (CACHE)
+# ==========================================
 @st.cache_resource
 def load_tf_model(path):
     try:
-        model = tf.keras.models.load_model(path, compile=False)
-        return model
+        return tf.keras.models.load_model(path, compile=False)
     except Exception as e:
-        st.error(f"Gagal load TF model {path}: {e}")
+        st.error(f"❌ Gagal load {path}: {e}")
         return None
 
 @st.cache_resource
 def load_torch_model(path):
     try:
-        # Asumsi kamu save full model (torch.save(model, path))
-        # Kalau kamu cuma save weights, kodenya beda dikit (harus define arsitektur dulu)
-        device = torch.device('cpu')
+        device = torch.device('cpu') 
+        # Load full model (Architecture + Weights)
         model = torch.load(path, map_location=device)
-        model.eval() # Set ke mode evaluasi
+        model.eval()
         return model
+    except AttributeError:
+        st.error("❌ Struktur Class PyTorch beda! Copy class dari notebook trainingmu ke script ini.")
+        return None
     except Exception as e:
-        st.error(f"Gagal load PyTorch model. Pastikan format .pth benar. Error: {e}")
+        st.error(f"❌ Gagal load PyTorch: {e}")
         return None
 
-# Load Semua Model ke Dictionary
+# Load Models
 models_loaded = {}
 for name, conf in MODELS_CONFIG.items():
-    if conf['type'] == 'tensorflow':
+    if "tf" in conf['type']:
         models_loaded[name] = load_tf_model(conf['path'])
-    elif conf['type'] == 'pytorch':
+    elif conf['type'] == "torch":
         models_loaded[name] = load_torch_model(conf['path'])
 
-# --- 3. IMAGE PREPROCESSING ---
-
-def process_image_tf(image_file):
-    """Preprocessing khusus TensorFlow (EfficientNet)"""
-    img = Image.open(image_file).convert('RGB')
-    img = img.resize(IMG_SIZE)
+# ==========================================
+# 5. PREPROCESSING FUNCTIONS
+# ==========================================
+def process_tf_eff(image_file):
+    img = Image.open(image_file).convert('RGB').resize(IMG_SIZE)
     arr = np.array(img)
-    
-    # Masking Logic (Sama kayak training)
-    masked = arr.copy()
-    h, w, _ = masked.shape
-    masked[0:int(h*0.3), 0:int(w*0.3), :] = 0
-    masked[0:int(h*0.3), w-int(w*0.3):w, :] = 0
-    
-    # Preprocess Input EfficientNet
-    inp = preprocess_input(masked.astype(np.float32))
-    return np.expand_dims(inp, axis=0), arr
+    # Masking
+    h, w, _ = arr.shape
+    arr[0:int(h*0.3), 0:int(w*0.3), :] = 0
+    arr[0:int(h*0.3), w-int(w*0.3):w, :] = 0
+    # EfficientNet Preprocessing (-1 to 1)
+    return np.expand_dims(preprocess_input(arr.astype(np.float32)), axis=0), arr
 
-def process_image_torch(image_file):
-    """Preprocessing khusus PyTorch (ResNet)"""
+def process_tf_custom(image_file):
+    img = Image.open(image_file).convert('RGB').resize(IMG_SIZE)
+    arr = np.array(img).astype(np.float32)
+    # Simple Rescale (0 to 1) <-- Fix untuk TB-Net 50%
+    arr = arr / 255.0
+    return np.expand_dims(arr, axis=0)
+
+def process_torch(image_file):
     img = Image.open(image_file).convert('RGB')
-    
-    # PyTorch butuh transformasi spesifik
-    preprocess = transforms.Compose([
-        transforms.Resize(256),
-        transforms.CenterCrop(224),
-        transforms.ToTensor(), # Ubah jadi 0-1 dan Channel First (CHW)
-        transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
+    transform = transforms.Compose([
+        transforms.Resize((224, 224)),
+        transforms.ToTensor(),
+        transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225])
     ])
-    
-    input_tensor = preprocess(img)
-    input_batch = input_tensor.unsqueeze(0) # Tambah batch dimension
-    return input_batch
+    return transform(img).unsqueeze(0)
 
-# --- 4. GRAD-CAM (Hanya TF) ---
-def make_gradcam_heatmap(img_array, model, last_conv_layer_name):
+# ==========================================
+# 6. GRAD-CAM UTILS
+# ==========================================
+def make_gradcam(img_array, model, layer_name):
     try:
         grad_model = tf.keras.models.Model(
-            [model.inputs], [model.get_layer(last_conv_layer_name).output, model.output]
+            [model.inputs], [model.get_layer(layer_name).output, model.output]
         )
         with tf.GradientTape() as tape:
-            last_conv_layer_output, preds = grad_model(img_array)
-            pred_index = tf.argmax(preds[0])
-            class_channel = preds[:, pred_index]
-
-        grads = tape.gradient(class_channel, last_conv_layer_output)
+            conv_out, preds = grad_model(img_array)
+            idx = tf.argmax(preds[0])
+            channel = preds[:, idx]
+        
+        grads = tape.gradient(channel, conv_out)
         pooled_grads = tf.reduce_mean(grads, axis=(0, 1, 2))
-        last_conv_layer_output = last_conv_layer_output[0]
-        heatmap = last_conv_layer_output @ pooled_grads[..., tf.newaxis]
+        heatmap = conv_out[0] @ pooled_grads[..., tf.newaxis]
         heatmap = tf.squeeze(heatmap)
         heatmap = tf.maximum(heatmap, 0) / tf.math.reduce_max(heatmap)
         return heatmap.numpy()
     except:
         return None
 
-def overlay_heatmap(clean_img, heatmap):
-    heatmap_resized = cv2.resize(heatmap, (clean_img.shape[1], clean_img.shape[0]))
-    heatmap_uint8 = np.uint8(255 * heatmap_resized)
-    heatmap_color = cv2.applyColorMap(heatmap_uint8, cv2.COLORMAP_JET)
-    superimposed_img = cv2.addWeighted(clean_img, 0.6, cv2.cvtColor(heatmap_color, cv2.COLOR_BGR2RGB), 0.4, 0)
-    return superimposed_img
+def overlay_cam(clean_img, heatmap):
+    heatmap = cv2.resize(heatmap, (clean_img.shape[1], clean_img.shape[0]))
+    heatmap = np.uint8(255 * heatmap)
+    heatmap = cv2.applyColorMap(heatmap, cv2.COLORMAP_JET)
+    return cv2.addWeighted(clean_img, 0.6, cv2.cvtColor(heatmap, cv2.COLOR_BGR2RGB), 0.4, 0)
 
-# --- 5. MAIN UI ---
-st.title("🔬 Hybrid AI Comparison (TF + PyTorch)")
+# ==========================================
+# 7. MAIN UI LAYOUT
+# ==========================================
 
-uploaded_file = st.file_uploader("Upload X-Ray", type=["jpg", "png"])
+# A. Header Section (Centered)
+st.markdown("<h1>🩻 AI Tuberculosis Diagnosis System</h1>", unsafe_allow_html=True)
+st.markdown("<p>Upload foto X-Ray Paru-paru untuk dianalisis oleh 3 model AI sekaligus.</p>", unsafe_allow_html=True)
 
-if uploaded_file:
-    # Tampilkan Gambar Asli
-    img_display = Image.open(uploaded_file)
-    st.image(img_display, caption="Original Image", width=300)
+# B. Upload Section (Centered with Columns)
+col_spacer1, col_upload, col_spacer2 = st.columns([1, 2, 1])
+with col_upload:
+    uploaded_file = st.file_uploader("", type=["jpg", "png", "jpeg"])
+
+if uploaded_file and models_loaded:
+    # C. Display Original Image (Centered)
+    input_eff, display_img = process_tf_eff(uploaded_file)
     
     st.markdown("---")
-    cols = st.columns(len(models_loaded))
+    c1, c2, c3 = st.columns([1, 1, 1])
+    with c2:
+        st.image(display_img, caption="📷 Gambar Input Asli", use_container_width=True)
+
+    st.markdown("<br>", unsafe_allow_html=True) # Spacer
+
+    # D. Prediction Loop & Flex Cards
+    # Kita pakai st.columns sesuai jumlah model
+    result_cols = st.columns(len(models_loaded))
     
-    # Loop Models
     for idx, (name, model) in enumerate(models_loaded.items()):
         if model is None: continue
         
         config = MODELS_CONFIG[name]
+        prob = 0.0
         
-        with cols[idx]:
-            st.subheader(name)
+        # --- LOGIC PREDIKSI ---
+        try:
+            if config['type'] == 'tf_eff':
+                preds = model.predict(input_eff, verbose=0)
+                prob = tf.nn.sigmoid(preds[0][0]).numpy()
             
-            # --- PREDIKSI ---
-            probability = 0.0
-            
-            # A. Kalo Model TensorFlow
-            if config['type'] == 'tensorflow':
-                input_tf, _ = process_image_tf(uploaded_file)
-                preds = model.predict(input_tf, verbose=0)
-                probability = tf.nn.sigmoid(preds[0][0]).numpy()
-            
-            # B. Kalo Model PyTorch
-            elif config['type'] == 'pytorch':
-                input_torch = process_image_torch(uploaded_file)
+            elif config['type'] == 'tf_custom':
+                inp = process_tf_custom(uploaded_file)
+                preds = model.predict(inp, verbose=0)
+                prob = preds[0][0] # Asumsi output sudah probability (0-1)
+                
+            elif config['type'] == 'torch':
+                inp = process_torch(uploaded_file)
                 with torch.no_grad():
-                    outputs = model(input_torch)
-                    # Asumsi output layer linear terakhir 2 kelas (atau 1 kelas sigmoid)
-                    # Sesuaikan logika ini dengan model PyTorch mu:
-                    probs = torch.softmax(outputs, dim=1) 
-                    probability = probs[0][1].item() # Ambil probabilitas kelas 1 (TB)
-            
-            # --- TAMPILKAN HASIL ---
-            threshold = 0.5
-            if probability > threshold:
-                label = "TUBERCULOSIS"
-                color = "#ffebee"
-                txt_color = "red"
-            else:
-                label = "NORMAL"
-                color = "#e8f5e9"
-                txt_color = "green"
-            
-            conf_percent = probability * 100 if label=="TUBERCULOSIS" else (1-probability)*100
-            
+                    out = model(inp)
+                    prob = out.item() # Asumsi output 1 neuron sigmoid
+        except Exception as e:
+            st.error(f"Error {name}: {e}")
+            continue
+
+        # --- LOGIC TAMPILAN KARTU ---
+        is_tb = prob > 0.5
+        label = "TUBERCULOSIS" if is_tb else "NORMAL"
+        # Warna: Merah muda (TB) / Hijau muda (Normal)
+        color_code = "#d32f2f" if is_tb else "#2e7d32" 
+        icon = "⚠️" if is_tb else "✅"
+        conf_percent = prob * 100 if is_tb else (1-prob)*100
+        
+        with result_cols[idx]:
+            # HTML Card Injection
             st.markdown(f"""
-            <div style="background-color: {color}; padding: 10px; border-radius: 5px; text-align: center; border: 1px solid {txt_color};">
-                <h4 style="color: {txt_color}; margin:0;">{label}</h4>
-                <h2 style="margin:0;">{conf_percent:.1f}%</h2>
+            <div class="result-card">
+                <div class="model-name">{name}</div>
+                <div class="prediction-label" style="color: {color_code};">
+                    {icon} {label}
+                </div>
+                <div class="confidence-score">
+                    {conf_percent:.1f}%
+                </div>
+                <div style="color: grey; font-size: 0.8rem; margin-top:5px;">Confidence Level</div>
             </div>
             """, unsafe_allow_html=True)
             
-            # --- VISUALISASI GRAD-CAM (Khusus EfficientNet) ---
-            if config['use_gradcam']:
-                st.write("---")
-                st.caption("Visualisasi AI:")
-                input_tf, original_arr = process_image_tf(uploaded_file)
-                heatmap = make_gradcam_heatmap(input_tf, model, config['layer'])
+            # --- GRAD-CAM DISPLAY ---
+            if config['cam']:
+                heatmap = make_gradcam(input_eff, model, config['layer'])
                 if heatmap is not None:
-                    final_img = overlay_heatmap(original_arr, heatmap)
-                    st.image(final_img, caption="Area Deteksi", use_container_width=True)
-                else:
-                    st.warning("Layer GradCAM tidak ditemukan.")
-            else:
-                st.write("---")
-                st.caption("Visualisasi tidak tersedia untuk model ini.")
+                    final_cam = overlay_cam(display_img, heatmap)
+                    st.image(final_cam, caption="🔍 Area Deteksi AI", use_container_width=True)
+            elif name == "ResNet50 (PyTorch)":
+                st.caption("Visualisasi tidak tersedia untuk PyTorch.")
 
 elif not models_loaded:
-    st.error("Belum ada model yang berhasil di-load.")
+    st.warning("⚠️ Menunggu model dimuat... Pastikan file model ada di folder yang sama.")
